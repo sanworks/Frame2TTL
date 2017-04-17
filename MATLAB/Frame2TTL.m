@@ -49,8 +49,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 classdef Frame2TTL < handle
     properties
         Port % ArCOM Serial port
-        LightThreshold = 40; % Light intensity read from the sensor to indicate a dark -> light frame transition
-        DarkThreshold = 80; % Light intensity read from the sensor to indicate a light -> dark frame transition
+        LightThreshold = 100; % Light intensity read from the sensor to indicate a dark -> light frame transition
+        DarkThreshold = 200; % Light intensity read from the sensor to indicate a light -> dark frame transition
+        SlidingWindowFilterNsamples = 1;
     end
     properties (Access = private)
         streaming = 0; % 0 if idle, 1 if streaming data
@@ -78,6 +79,14 @@ classdef Frame2TTL < handle
         function Value = ReadSensorValue(obj)
             obj.Port.write('V', 'uint8');
             Value = obj.Port.read(1, 'uint32');
+        end
+        function set.SlidingWindowFilterNsamples(obj, nSamples)
+            if (nSamples > 0) && (nSamples < 11)
+                obj.Port.write('N', 'uint8', nSamples, 'uint16');
+                obj.SlidingWindowFilterNsamples = nSamples;
+            else
+                error('Error setting sliding window filter, nSamples must be in the range 1 - 10.')
+            end
         end
         function stream(obj)
             obj.streaming = 1;
