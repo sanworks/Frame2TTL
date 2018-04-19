@@ -49,9 +49,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 classdef Frame2TTL < handle
     properties
         Port % ArCOM Serial port
-        LightThreshold = 100; % Light intensity read from the sensor to indicate a dark -> light frame transition
-        DarkThreshold = 200; % Light intensity read from the sensor to indicate a light -> dark frame transition
-        SlidingWindowFilterNsamples = 1;
+        LightThreshold % Light intensity read from the sensor to indicate a dark -> light frame transition
+        DarkThreshold % Light intensity read from the sensor to indicate a light -> dark frame transition
     end
     properties (Access = private)
         streaming = 0; % 0 if idle, 1 if streaming data
@@ -67,6 +66,8 @@ classdef Frame2TTL < handle
             if response ~= 218
                 error('Could not connect =( ')
             end
+            obj.LightThreshold = 40;
+            obj.DarkThreshold = 80;
         end
         function set.LightThreshold(obj, thresh)
             obj.Port.write('T', 'uint8', [thresh obj.DarkThreshold], 'uint16');
@@ -79,14 +80,6 @@ classdef Frame2TTL < handle
         function Value = ReadSensorValue(obj)
             obj.Port.write('V', 'uint8');
             Value = obj.Port.read(1, 'uint32');
-        end
-        function set.SlidingWindowFilterNsamples(obj, nSamples)
-            if (nSamples > 0) && (nSamples < 11)
-                obj.Port.write('N', 'uint8', nSamples, 'uint16');
-                obj.SlidingWindowFilterNsamples = nSamples;
-            else
-                error('Error setting sliding window filter, nSamples must be in the range 1 - 10.')
-            end
         end
         function stream(obj)
             obj.streaming = 1;
@@ -140,12 +133,6 @@ classdef Frame2TTL < handle
             if obj.Port.bytesAvailable > 0
                 obj.Port.read(obj.Port.bytesAvailable, 'uint8');
             end
-        end
-        function degrees = pos2degrees(obj, pos)
-            degrees = (double(pos)/1024)*360;
-        end
-        function pos = degrees2pos(obj, degrees)
-            pos = uint16((degrees/360)*1024);
         end
     end
 end

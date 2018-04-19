@@ -2,7 +2,7 @@
   ----------------------------------------------------------------------------
 
   This file is part of the Sanworks Frame2TTL repository
-  Copyright (C) 2017 Sanworks LLC, Sound Beach, New York, USA
+  Copyright (C) 2018 Sanworks LLC, Sound Beach, New York, USA
 
   ----------------------------------------------------------------------------
 
@@ -51,6 +51,8 @@ byte op = 0; // Operation code from MATLAB
 void setup() {
   pinMode(sensorLine, INPUT);
   pinMode(TTLoutput, OUTPUT);
+  pinMode(13, OUTPUT);
+  digitalWrite(13, LOW);
   currentTime = micros();
   lastTransitionTime = currentTime;
 }
