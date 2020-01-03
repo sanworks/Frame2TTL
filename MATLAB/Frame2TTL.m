@@ -49,8 +49,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 classdef Frame2TTL < handle
     properties
         Port % ArCOM Serial port
-        LightThreshold % Light intensity read from the sensor to indicate a dark -> light frame transition
-        DarkThreshold % Light intensity read from the sensor to indicate a light -> dark frame transition
+        LightThreshold = 40; % Light intensity read from the sensor to indicate a dark -> light frame transition
+        DarkThreshold  = 80; % Light intensity read from the sensor to indicate a light -> dark frame transition
     end
     properties (Access = private)
         streaming = 0; % 0 if idle, 1 if streaming data
