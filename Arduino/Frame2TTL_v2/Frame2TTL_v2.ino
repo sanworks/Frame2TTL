@@ -2,7 +2,7 @@
   ----------------------------------------------------------------------------
 
   This file is part of the Sanworks Frame2TTL repository
-  Copyright (C) 2021 Sanworks LLC, Rochester, New York, USA
+  Copyright (C) 2022 Sanworks LLC, Rochester, New York, USA
 
   ----------------------------------------------------------------------------
 
@@ -45,7 +45,7 @@ uint32_t nSamplesToRead = 0; // For use when relaying a fixed number of contiguo
 uint32_t nSamplesAdded = 0; // For USB Streaming
 int32_t total = 0; // For computing sliding window average
 volatile int16_t avgLightDiff = 0; // Sliding window average of sample-wise changes in light intensity
-int16_t lightThresh = 150; // Average change in luminance necessary to transition to "inPulse" state
+int16_t lightThresh = 100; // Average change in luminance necessary to transition to "inPulse" state
 int16_t darkThresh = -150; // Average change in luminance necessary to transition from "inPulse" state
 
 // State Variables
@@ -170,7 +170,7 @@ uint16_t autoSetThreshold(byte thresholdIndex) { // Measure 1 second of light du
       newThreshold = minValue*2; // 2x of largest measured negative sliding window average change in light intensity
     break;
     case 1: // Light threshold
-      newThreshold = maxValue*2; // 2x of largest measured positive sliding window average change in light intensity
+      newThreshold = maxValue*1.5; // 1.5x of largest measured positive sliding window average change in light intensity
     break;
   }
   return newThreshold;

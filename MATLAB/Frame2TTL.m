@@ -2,7 +2,7 @@
 ----------------------------------------------------------------------------
 
 This file is part of the Sanworks Frame2TTL repository
-Copyright (C) 2017 Sanworks LLC, Sound Beach, New York, USA
+Copyright (C) 2022 Sanworks LLC, Sound Beach, New York, USA
 
 ----------------------------------------------------------------------------
 

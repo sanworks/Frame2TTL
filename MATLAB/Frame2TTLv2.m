@@ -2,7 +2,7 @@
 ----------------------------------------------------------------------------
 
 This file is part of the Sanworks Frame2TTL repository
-Copyright (C) 2021 Sanworks LLC, Rochester, New York, USA
+Copyright (C) 2022 Sanworks LLC, Rochester, New York, USA
 
 ----------------------------------------------------------------------------
 
@@ -49,7 +49,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 classdef Frame2TTLv2 < handle
     properties
         Port % ArCOM Serial port
-        LightThreshold = 150; % Avg light intensity change read from the sensor to indicate a dark -> light frame transition
+        LightThreshold = 100; % Avg light intensity change read from the sensor to indicate a dark -> light frame transition
         DarkThreshold  = -150; % Avg light intensity change read from the sensor to indicate a light -> dark frame transition
         AcquiredData
     end
