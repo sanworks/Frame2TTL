@@ -18,14 +18,19 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 %}
 
-% Frame2TTL is a system to measure the instant when a computer monitor updates its display.
-% It uses a light sensor that outputs light intensity as a square wave. The
-% period of the square wave ("Sensor Value" in microseconds) encodes light intensity.
-% Lower periods = higher frequency = higher light intensity. A typical
-% value for a patch of screen whose pixels are at max intensity = 20us. A
-% typical value for a patch of screen at minimum intensity = 500us. A
-% typical value in total darkness = 20,000us. You can gain intuition for
-% the sensor and its thresholds using the stream() function below.
+% Frame2TTLv2 is a system to measure the instant when a computer monitor updates its display.
+% It uses a light sensor that outputs light intensity as an analog signal. The
+% voltage of the signal encodes light intensity (lux). You can gain intuition for
+% the sensor output using the stream() function below. 
+%
+% Thresholds for detection are in units of change in light intensity, computed by a 1ms sliding
+% window average (20 samples measured 50μs apart). Using change in
+% luminance instead of a simple luminance threshold improves performance on
+% skipped frames, when the LCD's light-to-dark transition time is >1ms.
+% Experiment with LightThreshold and DarkThreshold properties to achieve
+% reliable frame detection. The default settings are optimal for the ipad4
+% screen (https://www.adafruit.com/product/1751) when sync pixels are set
+% to half intensity - rgb(128,128,128).
 %
 % Installation:
 % 1. Install ArCOM from https://github.com/sanworks/ArCOM
@@ -37,14 +42,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 % - Directly manipulate its fields to change threshold parameters on the device.
 % - Run F.stream to see the optical sensor's streaming output (for testing purposes)
 %
-% - Optional: When you have found threshold values you are happy with, edit
-%   their values in the Frame2TTL Arduino sketch, and upload it to the
-%   device. This will cause the device to use those threshold values on
-%   boot, and you will no longer need to use the MATLAB software to set the thresholds.
-%
-% - To use the device, set the patch of screen underneath the sensor to either full intensity or 0
-%   intensity with alternating frames in your video stimulus. The Bpod
-%   PsychToolboxMovieServer plugin does this automatically.
+% - To use the device, set the patch of screen underneath the sensor to either ~half intensity or 0
+%   intensity with alternating frames in your video stimulus. The Bpod PsychToolboxVideoPlayer plugin does this automatically.
 
 classdef Frame2TTLv2 < handle
     properties
