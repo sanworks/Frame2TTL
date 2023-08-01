@@ -55,6 +55,7 @@ classdef ArCOMObject_Frame2TTL < handle
         UseOctave
         UsePsychToolbox
         validDataTypes
+        PortName
     end
     methods
         function obj = ArCOMObject_Frame2TTL(portString, baudRate, varargin)
@@ -138,6 +139,7 @@ classdef ArCOMObject_Frame2TTL < handle
                     pause(.2);
                     srl_flush(obj.Port);
             end
+            obj.PortName = portString;
         end
         function bytesAvailable = bytesAvailable(obj)
             switch obj.Interface
