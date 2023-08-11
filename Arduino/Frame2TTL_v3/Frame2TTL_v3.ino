@@ -23,9 +23,9 @@
 #include <SPI.h>
 #define HARDWARE_VERSION 3 // v1 was the previous versions of Frame2TTL
 
-ArCOM USBCOM(Serial);
+ArCOM USBCOM(Serial); // Wrap Serial interface with ArCOM (for easy transmission of different data types)
 
-IntervalTimer hwTimer;
+IntervalTimer hwTimer; // A hardware timer peripheral is used to achieve even sampling
 
 // Params
 const uint32_t samplingRate = 20000; // Analog sampling rate (Hz)
@@ -44,8 +44,8 @@ uint32_t nSamplesToRead = 0; // For use when relaying a fixed number of contiguo
 uint32_t nSamplesAdded = 0; // For USB Streaming
 int32_t total = 0; // For computing sliding window average
 volatile int16_t avgLightDiff = 0; // Sliding window average of sample-wise changes in light intensity
-int16_t lightThresh = 100; // Average change in luminance necessary to transition to "inPulse" state
-int16_t darkThresh = -150; // Average change in luminance necessary to transition from "inPulse" state
+int16_t lightThresh = 75; // Average change in luminance necessary to transition to "inPulse" state
+int16_t darkThresh = -75; // Average change in luminance necessary to transition from "inPulse" state
 
 // State Variables
 boolean inPulse = false; // True if the output sync line is high
@@ -62,18 +62,18 @@ byte dacBuffer[3] = {0}; // Holds bytes to be written to the DAC
 union {
   byte byteArray[4];
   uint16_t uint16[2];
-} dacValue;
+} dacValue; // This structure allows for very efficient type casting
 
 
 void setup() {
-  analogReadResolution(12);
-  SPI.begin();
-  pinMode(A4, INPUT_DISABLE);
-  pinMode(DAC_CS_Pin, OUTPUT);
+  analogReadResolution(12); // Set analog reads to 12-bit
+  SPI.begin(); // Initialize SPI bus (for communication with DAC)
+  pinMode(A4, INPUT_DISABLE); // Configure analog input pin to high impedance
+  pinMode(DAC_CS_Pin, OUTPUT); // Configure SPI Chip Select pin for DAC
   digitalWrite(DAC_CS_Pin, HIGH);
   SPI.beginTransaction(DACSettings);
   powerUpDAC();
-  hwTimer.begin(readNewSample, (1/(double)samplingRate)*1000000);  // readNewSample to run every sample
+  hwTimer.begin(readNewSample, (1/(double)samplingRate)*1000000);  // set readNewSample() to run once per sample
 }
 
 void readNewSample() {
@@ -188,27 +188,27 @@ uint16_t autoSetThreshold(byte thresholdIndex) { // Measure 1 second of light du
   return newThreshold;
 }
 
-#if HARDWARE_VERSION == 3
-  void dacWrite() {
-    digitalWriteFast(DAC_CS_Pin,LOW);
-    dacBuffer[0] = B00110000; // Channel
-    dacBuffer[1] = dacValue.byteArray[1];
-    dacBuffer[2] = dacValue.byteArray[0];
-    SPI.transfer(dacBuffer,3);
-    digitalWriteFast(DAC_CS_Pin,HIGH);
-    digitalWriteFast(DAC_CS_Pin,LOW);
-    dacBuffer[0] = B00110001; // Channel
-    dacBuffer[1] = dacValue.byteArray[3];
-    dacBuffer[2] = dacValue.byteArray[2];
-    SPI.transfer(dacBuffer,3);
-    digitalWriteFast(DAC_CS_Pin,HIGH);
-  }
-  void powerUpDAC() {
-    digitalWriteFast(DAC_CS_Pin,LOW);
-    dacBuffer[0] = B01100000; // Enable internal reference
-    dacBuffer[1] = 0;
-    dacBuffer[2] = 0;
-    SPI.transfer(dacBuffer,3);
-    digitalWriteFast(DAC_CS_Pin,HIGH);
-  }
-#endif
+void dacWrite() {
+  digitalWriteFast(DAC_CS_Pin,LOW);
+  dacBuffer[0] = B00110000; // Channel
+  dacBuffer[1] = dacValue.byteArray[1];
+  dacBuffer[2] = dacValue.byteArray[0];
+  SPI.transfer(dacBuffer,3);
+  digitalWriteFast(DAC_CS_Pin,HIGH);
+  digitalWriteFast(DAC_CS_Pin,LOW);
+  dacBuffer[0] = B00110001; // Channel
+  dacBuffer[1] = dacValue.byteArray[3];
+  dacBuffer[2] = dacValue.byteArray[2];
+  SPI.transfer(dacBuffer,3);
+  digitalWriteFast(DAC_CS_Pin,HIGH);
+}
+
+void powerUpDAC() {
+  digitalWriteFast(DAC_CS_Pin,LOW);
+  dacBuffer[0] = B01100000; // Enable internal reference
+  dacBuffer[1] = 0;
+  dacBuffer[2] = 0;
+  SPI.transfer(dacBuffer,3);
+  digitalWriteFast(DAC_CS_Pin,HIGH);
+}
+

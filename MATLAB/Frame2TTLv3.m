@@ -30,25 +30,25 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 % Experiment with LightThreshold and DarkThreshold properties to achieve
 % reliable frame detection. The default settings are optimal for the ipad4
 % screen (https://www.adafruit.com/product/1751) when sync pixels are set
-% to half intensity - rgb(128,128,128).
+% to max intensity - rgb(255,255,255).
 %
 % Installation:
 % 1. Connect the Frame2TTL device to the computer with a USB micro cable.
-% 2. Connect the Frame2TTL device BNC connector to an oscilloscope for
+% 2. Connect the Frame2TTL device BNC connectors to an oscilloscope for
 %    testing, or to your acquisition system input for data collection.
 %
 % - Create a Frame2TTL object with F = Frame2TTLv3('COMx') where COMx is your serial port string
 % - Directly manipulate its fields to change threshold parameters on the device.
 % - Run F.stream to see the optical sensor's streaming output (for testing purposes)
 %
-% - To use the device, set the patch of screen underneath the sensor to either ~half intensity or 0
+% - To use the device, set the patch of screen underneath the sensor to either full intensity or 0
 %   intensity with alternating frames in your video stimulus. The Bpod PsychToolboxVideoPlayer plugin does this automatically.
 
 classdef Frame2TTLv3 < handle
     properties
         Port % ArCOM Serial port
-        LightThreshold = 100; % Avg light intensity change read from the sensor to indicate a dark -> light frame transition
-        DarkThreshold  = -150; % Avg light intensity change read from the sensor to indicate a light -> dark frame transition
+        LightThreshold = 75; % Avg light intensity change read from the sensor to indicate a dark -> light frame transition
+        DarkThreshold  = -75; % Avg light intensity change read from the sensor to indicate a light -> dark frame transition
         AcquiredData
     end
     properties (Access = private)
