@@ -34,7 +34,7 @@ IntervalTimer hwTimer; // A hardware timer peripheral is used to achieve even sa
 
 // I/O pins
 #if HARDWARE_VERSION == 2
-  #define TTL_OUTPUT_LINE 9
+  #define TTL_OUTPUT_LINE 12
 #elif HARDWARE_VERSION == 3
   #define DAC_CS_PIN 9
 #else
