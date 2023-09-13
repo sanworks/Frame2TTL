@@ -21,46 +21,57 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 % Frame2TTLv3 is a system to measure the instant when a computer monitor updates its display.
 % It uses a light sensor that outputs light intensity as an analog signal. The
 % voltage of the signal encodes light intensity. You can gain intuition for
-% the sensor output using the stream() function below.
+% the sensor output using the streamUI() function below.
 %
 % Thresholds for detection are in units of change in light intensity, computed by a 1ms sliding
 % window average (20 samples measured 50μs apart). Using change in
 % luminance instead of a simple luminance threshold improves performance on
-% skipped frames, when the LCD's light-to-dark transition time is >1ms.
-% Experiment with LightThreshold and DarkThreshold properties to achieve
-% reliable frame detection. The default settings are optimal for the ipad4
-% screen (https://www.adafruit.com/product/1751) when sync pixels are set
-% to max intensity - rgb(255,255,255).
+% skipped frames.
 %
 % Installation:
 % 1. Connect the Frame2TTL device to the computer with a USB micro cable.
 % 2. Connect the Frame2TTL device BNC connectors to an oscilloscope for
 %    testing, or to your acquisition system input for data collection.
 %
-% - Create a Frame2TTL object with F = Frame2TTLv3('COMx') where COMx is your serial port string
-% - Directly manipulate its fields to change threshold parameters on the device.
-% - Run F.stream to see the optical sensor's streaming output (for testing purposes)
+% Usage:
+% - F = Frame2TTL('COMx'); % where COMx is your serial port string
+% - F.LightThreshold = 100; % Set the dark --> light detection threshold
+% - F.DarkThreshold = -100; % Set the light--> dark detection threshold
+% - F.setDarkThreshold_Auto; % Automatically sets the dark threshold.
+%                            % To be run while the pixels under the sensor
+%                            are WHITE (standard sensor) or half pixel intensity (IBL sensor)
+% - F.setLightThreshold_Auto; % Automatically sets the light threshold.
+%                            % To be run while the pixels under the sensor
+%                            are BLACK
+% - Measurements = F.readSensor(nSamples) % Returns raw sensor
+%   measurements. Units = bits in range 0 (no light) - 2^16 (sensor saturation)
 %
-% - To use the device, set the patch of screen underneath the sensor to either full intensity or 0
-%   intensity with alternating frames in your video stimulus. The Bpod PsychToolboxVideoPlayer plugin does this automatically.
+% - F.streamUI; % Launches a GUI to view the optical sensor's streaming output (for testing purposes)
+%
+% - To use the device, alternate the patch of pixels underneath the sensor
+%   between white and black with each frame in your video stimulus. For
+%   white, use maximum pixel intensity (standard sensor) or half pixel intensity (IBL sensor).
 
-classdef Frame2TTLv3 < handle
+classdef Frame2TTL < handle
     properties
         Port % ArCOM Serial port
-        LightThreshold = 75; % Avg light intensity change read from the sensor to indicate a dark -> light frame transition
-        DarkThreshold  = -75; % Avg light intensity change read from the sensor to indicate a light -> dark frame transition
+        HardwareVersion
+        FirmwareVersion
+        LightThreshold  % Avg light intensity change read from the sensor to indicate a dark -> light frame transition
+        DarkThreshold   % Avg light intensity change read from the sensor to indicate a light -> dark frame transition
         AcquiredData
     end
     properties (Access = private)
+        MinSupportedFirmware = 3; % Minimum supported firmware
         Timer % MATLAB timer (for reading data from the serial buffer during USB streaming)
-        HWversion
         streaming = 0; % 0 if idle, 1 if streaming data
         gui = struct; % Handles for GUI elements
         nDisplaySamples = 200; % When streaming to plot, show up to 200 samples
         maxDisplayTime = 2; % When streaming to plot, show up to last 2 seconds
+        initialized = false; % Set to true after the constructor
     end
     methods
-        function obj = Frame2TTLv3(portString)
+        function obj = Frame2TTL(portString)
             % Destroy any orphaned timers from previous instances
             T = timerfindall;
             for i = 1:length(T)
@@ -72,30 +83,62 @@ classdef Frame2TTLv3 < handle
                     warning('on');
                 end
             end
-            obj.Port = ArCOMObject_Frame2TTL(portString, 480000000);
+
+            % Initialize USB Serial connection
+            obj.Port = ArCOMObject_Frame2TTL(portString, 12000000);
             obj.Port.write('C', 'uint8');
             response = obj.Port.read(1, 'uint8');
             if response ~= 218
                 error('Could not connect =( ')
             end
+
+            % Read firmware version
+            obj.Port.write('F', 'uint8');
+            pause(.25)
+            if obj.Port.bytesAvailable == 0 % Firmware v1 does not respond to command 'F'
+                error(['Old Frame2TTL firmware detected. Please update to firmware v' num2str(obj.MinSupportedFirmware) ' or newer.'])
+            end
+            obj.FirmwareVersion = obj.Port.read(1, 'uint8');
+            if obj.FirmwareVersion < obj.MinSupportedFirmware
+                error(['Old Frame2TTL firmware detected. Please update to firmware v' num2str(obj.MinSupportedFirmware) ' or newer.'])
+            end
+
+            % Read hardware version and set default thresholds
             obj.Port.write('#', 'uint8');
-            pause(.25);
-            if obj.Port.bytesAvailable == 0
-                obj.HWversion = 1;
-            else
-                obj.HWversion = obj.Port.read(1, 'uint8');
+            obj.HardwareVersion = obj.Port.read(1, 'uint8');
+            if obj.HardwareVersion > 2 % If Frame2TTL v3, set baud rate accordingly
+                obj.Port = [];
+                obj.Port = ArCOMObject_Frame2TTL(portString, 480000000);
+            end
+            switch obj.HardwareVersion
+                case 2
+                    obj.LightThreshold = 100;
+                    obj.DarkThreshold = -150;
+                case 3
+                    obj.LightThreshold = 75;
+                    obj.DarkThreshold = -75;
             end
             obj.Port.write('T', 'uint8', [obj.LightThreshold obj.DarkThreshold], 'int16');
+
+            % Finish setup
+            obj.initialized = true;
             obj.nDisplaySamples = 200;
         end
+
         function set.LightThreshold(obj, thresh)
-            obj.Port.write('T', 'uint8', [thresh obj.DarkThreshold], 'int16');
+            if obj.initialized
+                obj.Port.write('T', 'uint8', [thresh obj.DarkThreshold], 'int16');
+            end
             obj.LightThreshold = thresh;
         end
+
         function set.DarkThreshold(obj, thresh)
-            obj.Port.write('T', 'uint8', [obj.LightThreshold thresh], 'int16');
+            if obj.initialized
+                obj.Port.write('T', 'uint8', [obj.LightThreshold thresh], 'int16');
+            end
             obj.DarkThreshold = thresh;
         end
+
         function Value = readSensor(obj, varargin) % Optional argument = nSamples (contiguous)
             nSamples = 1;
             if nargin > 1
@@ -104,17 +147,20 @@ classdef Frame2TTLv3 < handle
             obj.Port.write('V', 'uint8', nSamples, 'uint32');
             Value = obj.Port.read(nSamples, 'uint16');
         end
+
         function setDarkThreshold_Auto(obj)
             obj.Port.write('D', 'uint8');
             pause(3);
             obj.DarkThreshold = obj.Port.read(1, 'int16');
         end
+
         function setLightThreshold_Auto(obj)
             obj.Port.write('L', 'uint8');
             pause(3);
             obj.LightThreshold = obj.Port.read(1, 'int16');
         end
-        function stream(obj)
+
+        function streamUI(obj)
             obj.AcquiredData = uint16(zeros(1,1000000));
             obj.streaming = 1;
             obj.gui.DisplayIntensities = nan(1,obj.nDisplaySamples);
@@ -132,6 +178,7 @@ classdef Frame2TTLv3 < handle
             obj.Timer = timer('TimerFcn',@(h,e)obj.updatePlot(), 'ExecutionMode', 'fixedRate', 'Period', 0.05, 'Tag', ['F2TTL_' obj.Port.PortName]);
             start(obj.Timer);
         end
+
         function delete(obj)
             if obj.streaming == 1
                 obj.endAcq();
@@ -139,6 +186,7 @@ classdef Frame2TTLv3 < handle
             obj.Port = []; % Trigger the ArCOM port's destructor function (closes and releases port)
         end
     end
+
     methods (Access = private)
         function endAcq(obj)
             stop(obj.Timer);
@@ -153,6 +201,7 @@ classdef Frame2TTLv3 < handle
             end
             obj.AcquiredData = obj.AcquiredData(1:obj.gui.AcquiredDataPos);
         end
+        
         function updatePlot(obj)
             BytesAvailable = obj.Port.bytesAvailable;
             if BytesAvailable > 1

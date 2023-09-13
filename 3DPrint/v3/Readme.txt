@@ -1,4 +1,10 @@
-Files are designed for 3D-printing on an FDM machine
+Build notes:
+
+F2TTL_Standard_V3_X_X and
+F2TTL_FOR_IBL_V3_X_X
+are designed for 3D-printing on an FDM machine.
+
+The IBL version of the file is 1mm thinner, to accomodate a 0.6mm thick sensor PCB. This allows the sensor to fit in the 2mm space between the IBL behavior rig's Fresnel lens and IPS display.
 
 Material: Ultimaker CPE, ColorFabb XT or equivalent
 Material color: Black

@@ -22,9 +22,11 @@
 #include "ArCOM.h"
 #include <SPI.h>
 
-#define FIRMWARE_VERSION 2
-#define HARDWARE_VERSION 2 // v1 was the previous public version of Frame2TTL
-// NOTE: This firmware cannot compile for Frame2TTL hardware earlier than v3
+// SETUP MACROS TO COMPILE FOR TARGET DEVICE:
+#define HARDWARE_VERSION 0 // IMPORTANT! Set this to 2 or 3 to match your hardware. DO NOT set to 1. Use the 'Legacy' firmware file for hardware v1.
+// ------------------------------------------
+
+#define FIRMWARE_VERSION 3
 
 ArCOM USBCOM(Serial); // Wrap Serial interface with ArCOM (for easy transmission of different data types)
 
@@ -97,10 +99,12 @@ void readNewSample() {
   currentTime = micros();
 
   // Read sensor and update analog output
-  sensorValue = analogRead(A4)*16;
+  
   #if HARDWARE_VERSION == 2
+    sensorValue = analogRead(A0);
     analogWrite(A14, sensorValue/16); // Map sensorValue from 16-bit to 12-bit range (0-4096) and write to analog output
   #else
+    sensorValue = analogRead(A4)*16;
     dacValue.uint16[1] = sensorValue;
   #endif
   
@@ -131,7 +135,7 @@ void readNewSample() {
       dacValue.uint16[0] = 0;
     }
   }
-  if HARDWARE_VERSION == 3
+  #if HARDWARE_VERSION == 3
     dacWrite();
   #endif
   sampleReadyFlag = true;
@@ -199,7 +203,7 @@ uint16_t autoSetThreshold(byte thresholdIndex) { // Measure 1 second of light du
   int16_t newThreshold = 0;
   int16_t minValue = 65535;
   int16_t maxValue = -65535;
-  uint32_t nSamplesToMeasure = 30000; // 3 seconds at 20kHz
+  uint32_t nSamplesToMeasure = 40000; // 2 seconds at 20kHz
   sampleReadyFlag = false;
   for (int i = 0; i < nSamplesToMeasure; i++) {
     while (sampleReadyFlag == false) {} // Wait for hardware timer to call readNewSample() and update avgLightDiff
@@ -216,7 +220,7 @@ uint16_t autoSetThreshold(byte thresholdIndex) { // Measure 1 second of light du
       newThreshold = minValue*2; // 2x of largest measured negative sliding window average change in light intensity
     break;
     case 1: // Light threshold
-      newThreshold = maxValue*1.5; // 1.5x of largest measured positive sliding window average change in light intensity
+      newThreshold = maxValue*2; // 2x of largest measured positive sliding window average change in light intensity
     break;
   }
   return newThreshold;

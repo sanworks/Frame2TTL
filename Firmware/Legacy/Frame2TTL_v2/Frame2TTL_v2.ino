@@ -2,7 +2,7 @@
   ----------------------------------------------------------------------------
 
   This file is part of the Sanworks Frame2TTL repository
-  Copyright (C) 2023 Sanworks LLC, Rochester, New York, USA
+  Copyright (C) 2022 Sanworks LLC, Rochester, New York, USA
 
   ----------------------------------------------------------------------------
 
@@ -20,28 +20,17 @@
 */
 
 #include "ArCOM.h"
-#include <SPI.h>
+#define HARDWARE_VERSION 2 // v1 was the previous versions of Frame2TTL
 
-#define FIRMWARE_VERSION 2
-#define HARDWARE_VERSION 2 // v1 was the previous public version of Frame2TTL
-// NOTE: This firmware cannot compile for Frame2TTL hardware earlier than v3
+ArCOM USBCOM(Serial);
+const byte TTLoutputLine = 12;
 
-ArCOM USBCOM(Serial); // Wrap Serial interface with ArCOM (for easy transmission of different data types)
-
-IntervalTimer hwTimer; // A hardware timer peripheral is used to achieve even sampling
-
-// I/O pins
-#if HARDWARE_VERSION == 2
-  #define TTL_OUTPUT_LINE 9
-#elif HARDWARE_VERSION == 3
-  #define DAC_CS_PIN 9
-#else
-  #error Error! HARDWARE_VERSION must be either 2 or 3. HARDWARE_VERSION 1 requires the legacy firmware.
-#endif
+IntervalTimer hwTimer;
 
 // Params
 const uint32_t samplingRate = 20000; // Analog sampling rate (Hz)
 const uint16_t windowSize = 20; // Number of analog samples to consider for edge detection
+unsigned long refractoryDuration = 2000; // Minimum time before output line can change states again, units = us
 
 // Program Variables
 uint32_t currentTime = 0; // Current time (us)
@@ -56,8 +45,8 @@ uint32_t nSamplesToRead = 0; // For use when relaying a fixed number of contiguo
 uint32_t nSamplesAdded = 0; // For USB Streaming
 int32_t total = 0; // For computing sliding window average
 volatile int16_t avgLightDiff = 0; // Sliding window average of sample-wise changes in light intensity
-int16_t lightThresh = 75; // Average change in luminance necessary to transition to "inPulse" state
-int16_t darkThresh = -75; // Average change in luminance necessary to transition from "inPulse" state
+int16_t lightThresh = 100; // Average change in luminance necessary to transition to "inPulse" state
+int16_t darkThresh = -150; // Average change in luminance necessary to transition from "inPulse" state
 
 // State Variables
 boolean inPulse = false; // True if the output sync line is high
@@ -67,42 +56,19 @@ volatile boolean sampleReadyFlag = false; // True if a sample has been read
 // Communication variables
 byte op = 0; // Operation code from PC
 
-// DAC variables (v3 only)
-SPISettings DACSettings(30000000, MSBFIRST, SPI_MODE0); // Settings for DAC
-byte dacBuffer[3] = {0}; // Holds bytes to be written to the DAC
-union {
-  byte byteArray[4];
-  uint16_t uint16[2];
-} dacValue; // This structure allows for very efficient type casting
-
-
 void setup() {
-  SPI.begin(); // Initialize SPI bus (for communication with DAC)
-  #if HARDWARE_VERSION == 2
-    analogReadResolution(16); // Set analog reads to 16-bit
-    analogWriteResolution(12); // Set analog writes to 12-bit
-    pinMode(TTL_OUTPUT_LINE, OUTPUT);
-  #elif HARDWARE_VERSION == 3
-    analogReadResolution(12); // Set analog reads to 12-bit
-    pinMode(A4, INPUT_DISABLE); // Configure analog input pin to high impedance
-    pinMode(DAC_CS_PIN, OUTPUT); // Configure SPI Chip Select pin for DAC
-    digitalWrite(DAC_CS_PIN, HIGH);
-    SPI.beginTransaction(DACSettings);
-    powerUpDAC();
-  #endif
-  hwTimer.begin(readNewSample, (1/(double)samplingRate)*1000000);  // set readNewSample() to run once per sample
+  analogReadResolution(16); // Set analog input resolution to 16-bit (Maximum supported; only 13-bits usable due to noise floor)
+  analogWriteResolution(12); // Set analog output resolution to 12-bit (Maximum supported)
+  pinMode(TTLoutputLine, OUTPUT); // Configure TTL sync line as a digital output. This output is galvanically isolated from USB ground by ADUM6200 chip.
+  pinMode(13, OUTPUT); // Onboard LED (initialized so it can be used for troubleshooting)
+  digitalWrite(13, LOW); // Set board LED off
+  hwTimer.begin(readNewSample, (1/(double)samplingRate)*1000000);  // readNewSample to run every sample
 }
 
 void readNewSample() {
   currentTime = micros();
-
-  // Read sensor and update analog output
-  sensorValue = analogRead(A4)*16;
-  #if HARDWARE_VERSION == 2
-    analogWrite(A14, sensorValue/16); // Map sensorValue from 16-bit to 12-bit range (0-4096) and write to analog output
-  #else
-    dacValue.uint16[1] = sensorValue;
-  #endif
+  sensorValue = analogRead(A0); // Read the sensor voltage (16-bit, range = 0-65535)
+  analogWrite(A14, sensorValue/16); // Map sensorValue from 16-bit to 12-bit range (0-4096) and write to analog output
   
 // Compute avgLightDiff, the sliding window average of sample-wise change in light level
   memcpy(sampleBuffer, &sampleBuffer[1], sizeof(sampleBuffer)-2);
@@ -117,23 +83,14 @@ void readNewSample() {
   if (inPulse == false) {
     if (avgLightDiff > lightThresh) {
       inPulse = true;
-      #if HARDWARE_VERSION == 2
-        digitalWrite(TTL_OUTPUT_LINE, HIGH);
-      #endif
-      dacValue.uint16[0] = 54067;
+      digitalWrite(TTLoutputLine, HIGH);
     }
   } else {
     if (avgLightDiff < darkThresh) {
       inPulse = false;
-      #if HARDWARE_VERSION == 2
-        digitalWrite(TTL_OUTPUT_LINE, LOW);
-      #endif
-      dacValue.uint16[0] = 0;
+      digitalWrite(TTLoutputLine, LOW);
     }
   }
-  if HARDWARE_VERSION == 3
-    dacWrite();
-  #endif
   sampleReadyFlag = true;
 }
 
@@ -168,9 +125,6 @@ void loop() {
           sampleReadyFlag = false;
           USBCOM.writeUint16(sensorValue);
         }
-      break;
-      case 'F': // Return firmware version
-        USBCOM.writeByte(FIRMWARE_VERSION);
       break;
       case '#': // Return hardware version
         USBCOM.writeByte(HARDWARE_VERSION);
@@ -221,29 +175,3 @@ uint16_t autoSetThreshold(byte thresholdIndex) { // Measure 1 second of light du
   }
   return newThreshold;
 }
-
-#if HARDWARE_VERSION == 3
-  void dacWrite() {
-    digitalWriteFast(DAC_CS_PIN,LOW);
-    dacBuffer[0] = B00110000; // Channel
-    dacBuffer[1] = dacValue.byteArray[1];
-    dacBuffer[2] = dacValue.byteArray[0];
-    SPI.transfer(dacBuffer,3);
-    digitalWriteFast(DAC_CS_PIN,HIGH);
-    digitalWriteFast(DAC_CS_PIN,LOW);
-    dacBuffer[0] = B00110001; // Channel
-    dacBuffer[1] = dacValue.byteArray[3];
-    dacBuffer[2] = dacValue.byteArray[2];
-    SPI.transfer(dacBuffer,3);
-    digitalWriteFast(DAC_CS_PIN,HIGH);
-  }
-
-  void powerUpDAC() {
-    digitalWriteFast(DAC_CS_PIN,LOW);
-    dacBuffer[0] = B01100000; // Enable internal reference
-    dacBuffer[1] = 0;
-    dacBuffer[2] = 0;
-    SPI.transfer(dacBuffer,3);
-    digitalWriteFast(DAC_CS_PIN,HIGH);
-  }
-#endif
