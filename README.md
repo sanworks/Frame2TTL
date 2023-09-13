@@ -1,5 +1,5 @@
 # Frame2TTL
-Hardware and software to capture discrete pixel intensity transitions from a small patch of an LCD screen. Transitions are reported as 5V TTL pulses. This device is used to provide ground-truth measurements of frame onset times in visual stimulus presentation (e.g. with PsychToolbox; http://psychtoolbox.org/ ).
+Hardware and software to capture discrete pixel intensity transitions from a small patch of an LCD screen. Transitions are reported as TTL pulses. This device is used to provide precise measurements of frame onset time in visual stimulus presentation
 
 The bill of materials and other documentation is available at:
 https://sites.google.com/site/frame2ttl
