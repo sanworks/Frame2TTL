@@ -211,8 +211,8 @@ classdef Frame2TTL < handle
                 NewIntensities = typecast(NewIntensities, 'uint16');
                 obj.AcquiredData(obj.gui.AcquiredDataPos:obj.gui.AcquiredDataPos+nIntensities-1) = NewIntensities;
                 obj.gui.AcquiredDataPos = obj.gui.AcquiredDataPos + nIntensities;
-                Div = 500;
-                Times = (obj.gui.DisplayPos:obj.gui.DisplayPos+nIntensities-1)/Div;
+                SamplingRate = 1000;
+                Times = (obj.gui.DisplayPos:obj.gui.DisplayPos+nIntensities-1)/SamplingRate;
                 DisplayTime = (Times(end)-obj.gui.SweepStartTime);
                 obj.gui.DisplayPos = obj.gui.DisplayPos + nIntensities;
                 if DisplayTime >= obj.maxDisplayTime
