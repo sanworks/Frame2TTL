@@ -133,7 +133,14 @@ void resetOnBoot() {
   reset_bit.write(reset_bit_value);
   if (reset_bit_value == 0) {
     digitalWrite(13, HIGH);
-    delay(REBOOT_TIMER*1000);
+    uint32_t currentTime = millis();
+    while (millis() - currentTime < (REBOOT_TIMER*1000)) {
+      if (SerialUSB) {
+        digitalWrite(13, LOW);
+        reset_bit.write(1);
+        return;
+      }
+    }
     digitalWrite(13, LOW);
     NVIC_SystemReset();
   }
