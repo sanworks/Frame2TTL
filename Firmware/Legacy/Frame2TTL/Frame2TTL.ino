@@ -2,7 +2,7 @@
   ----------------------------------------------------------------------------
 
   This file is part of the Sanworks Frame2TTL repository
-  Copyright (C) 2018 Sanworks LLC, Sound Beach, New York, USA
+  Copyright (C) 2023 Sanworks LLC, Rochester, New York, USA
 
   ----------------------------------------------------------------------------
 
@@ -18,8 +18,10 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
-
+#include <FlashStorage.h>
 #include "ArCOM.h"
+#define REBOOT_TIMER 50 // Seconds until soft-reboot after a hard reboot. See notes in resetOnBoot() below.
+FlashStorage(reset_bit, int); // Flash storage used as EEPROM
 ArCOM USBCOM(SerialUSB); // Creates an ArCOM object called USBCOM, wrapping SerialUSB connection to MATLAB/Python
 
 // Lines
@@ -53,6 +55,8 @@ void setup() {
   pinMode(TTLoutput, OUTPUT);
   pinMode(13, OUTPUT);
   digitalWrite(13, LOW);
+  resetOnBoot(); // On every hard reboot, the resetOnBoot() function soft-reboots the board after REBOOT_TIMER seconds.
+                 // This circumvents an issue where the USB serial interface freezes after reboot on Win10
   currentTime = micros();
   lastTransitionTime = currentTime;
 }
@@ -115,5 +119,22 @@ void loop() {
   }
   if ((currentTime - refractoryStartTime) > refractoryDuration) {
     inRefractory = false;
+  }
+}
+
+void resetOnBoot() {
+  // On every hard reboot, the resetOnBoot() function soft-reboots the board after REBOOT_TIMER seconds.
+  // This circumvents an issue where the USB serial interface freezes after reboot on Win10
+  int reset_bit_value = reset_bit.read();
+  if (reset_bit_value > 1) {
+    reset_bit_value = 0;
+  }
+  reset_bit_value = 1-reset_bit_value;
+  reset_bit.write(reset_bit_value);
+  if (reset_bit_value == 0) {
+    digitalWrite(13, HIGH);
+    delay(REBOOT_TIMER*1000);
+    digitalWrite(13, LOW);
+    NVIC_SystemReset();
   }
 }
