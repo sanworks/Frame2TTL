@@ -1,10 +1,10 @@
 Build notes:
 
-F2TTL_Standard_V3_X_X and
-F2TTL_FOR_IBL_V3_X_X
+F2TTL_v3_PrintedParts_r1_0 and
+F2TTL_v3_PrintedParts_r1_0_PressFitSensor
 are designed for 3D-printing on an FDM machine.
 
-The IBL version of the file is 1mm thinner, to accomodate a 0.6mm thick sensor PCB. This allows the sensor to fit in the 2mm space between the IBL behavior rig's Fresnel lens and IPS display.
+In the PressFitSensor version, the sensor connects to the side mount arm with a loose friction fit instead of with tab locking, allowing it to be removed after assembly.
 
 Material: Ultimaker CPE, ColorFabb XT or equivalent
 Material color: Black
