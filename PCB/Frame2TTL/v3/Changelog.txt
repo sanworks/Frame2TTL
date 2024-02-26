@@ -1,0 +1,5 @@
+v3.1:
+-Resized BNC mounting holes for better alignment
+
+v3.0: 
+Initial release

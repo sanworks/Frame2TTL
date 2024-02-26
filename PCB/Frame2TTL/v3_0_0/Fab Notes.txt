@@ -1,3 +1,0 @@
--Frame2TTL_v3_X_X_Sensor must be fabbed with board thickness = 
-1.6mm for the standard version
-0.6mm for the IBL version
