@@ -183,6 +183,9 @@ classdef Frame2TTL < handle
                 else
                     obj.Port.write('T', 'uint8', thresh, 'int32');
                 end
+                if obj.streaming
+                    set(obj.gui.LightThreshLine, 'YData', [thresh, thresh])
+                end
             end
             obj.LightThreshold = thresh;
         end
@@ -207,6 +210,9 @@ classdef Frame2TTL < handle
                     obj.Port.write('T', 'uint8', [obj.LightThreshold thresh], 'int16');
                 else
                     obj.Port.write('K', 'uint8', thresh, 'int32');
+                end
+                if obj.streaming
+                    set(obj.gui.DarkThreshLine, 'YData', [thresh, thresh])
                 end
             end
             obj.DarkThreshold = thresh;
