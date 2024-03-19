@@ -148,9 +148,11 @@ class Frame2TTL:
 
     @detect_mode.setter
     def detect_mode(self, value):
-        original_mode = self._detect_mode;
+        original_mode = self._detect_mode
         if value not in [0, 1]:
             raise Frame2TTLError('Error: threshold_mode must be either 0 or 1.')
+        if self._hardware_version == 2 and value == 0:
+            raise Frame2TTLError('Error: detect_mode 0 is not supported on Frame2TTL v2.')
         self.port.write((ord('M'), value), 'uint8')
         self._detect_mode = value
         if value != original_mode:
