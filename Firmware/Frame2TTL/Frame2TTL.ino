@@ -26,7 +26,7 @@
 #define HARDWARE_VERSION 0 // IMPORTANT! Set this to 2 or 3 to match your hardware. DO NOT set to 1. Use the 'Legacy' firmware file for hardware v1.
 // ------------------------------------------
 
-#define FIRMWARE_VERSION 3
+#define FIRMWARE_VERSION 4
 
 ArCOM USBCOM(Serial); // Wrap Serial interface with ArCOM (for easy transmission of different data types)
 
@@ -58,8 +58,10 @@ uint32_t nSamplesToRead = 0; // For use when relaying a fixed number of contiguo
 uint32_t nSamplesAdded = 0; // For USB Streaming
 int32_t total = 0; // For computing sliding window average
 volatile int16_t avgLightDiff = 0; // Sliding window average of sample-wise changes in light intensity
-int16_t lightThresh = 75; // Average change in luminance necessary to transition to "inPulse" state
-int16_t darkThresh = -75; // Average change in luminance necessary to transition from "inPulse" state
+int32_t lightThresh = 75; // Average change in luminance necessary to transition to "inPulse" state
+int32_t darkThresh = -75; // Average change in luminance necessary to transition from "inPulse" state
+volatile int32_t lightMeasure2Threshold = 0; // Measurement of light to compare against threshold for detection
+uint8_t thresholdMode = 0; // Threshold mode. 0 = moving average of sample-wise change in luminance. 1 = absolute luminance
 
 // State Variables
 boolean inPulse = false; // True if the output sync line is high
@@ -109,17 +111,22 @@ void readNewSample() {
   #endif
   
 // Compute avgLightDiff, the sliding window average of sample-wise change in light level
-  memcpy(sampleBuffer, &sampleBuffer[1], sizeof(sampleBuffer)-2);
-  sampleBuffer[windowSize-1] = sensorValue;
-  total = 0;
-  for (int i = 0; i < windowSize-1; i++) {
-    total += (sampleBuffer[i+1] - sampleBuffer[i]);
+  if (thresholdMode == 0) {
+    memcpy(sampleBuffer, &sampleBuffer[1], sizeof(sampleBuffer)-2);
+    sampleBuffer[windowSize-1] = sensorValue;
+    total = 0;
+    for (int i = 0; i < windowSize-1; i++) {
+      total += (sampleBuffer[i+1] - sampleBuffer[i]);
+    }
+    avgLightDiff = total/windowSize;
+    lightMeasure2Threshold = avgLightDiff;
+  } else {
+    lightMeasure2Threshold = sensorValue;
   }
-  avgLightDiff = total/windowSize;
   
   // Detect light patch transition events and set sync state
   if (inPulse == false) {
-    if (avgLightDiff > lightThresh) {
+    if (lightMeasure2Threshold > lightThresh) {
       inPulse = true;
       #if HARDWARE_VERSION == 2
         digitalWrite(TTL_OUTPUT_LINE, HIGH);
@@ -127,7 +134,7 @@ void readNewSample() {
       dacValue.uint16[0] = 54067;
     }
   } else {
-    if (avgLightDiff < darkThresh) {
+    if (lightMeasure2Threshold < darkThresh) {
       inPulse = false;
       #if HARDWARE_VERSION == 2
         digitalWrite(TTL_OUTPUT_LINE, LOW);
@@ -149,19 +156,25 @@ void loop() {
         USBCOM.writeByte(218);
       break;
       case 'T': // Set Light + Dark Thresholds (Manual)
-        lightThresh = USBCOM.readInt16();
-        darkThresh = USBCOM.readInt16();
+        lightThresh = USBCOM.readInt32();
+      break;
+      case 'K': // Set Dark Threshold (Manual)
+        darkThresh = USBCOM.readInt32();
       break;
       case 'D': // Set Dark Threshold (Automatic; measured with sync patch on to ensure that on -> off transition is below noise)
         darkThresh = autoSetThreshold(0);
-        USBCOM.writeInt16(darkThresh);
+        USBCOM.writeInt32(darkThresh);
       break;
       case 'L': // Set Light Threshold (Automatic; measured with sync patch off to ensure that off -> on transition is above noise)
         lightThresh = autoSetThreshold(1);
-        USBCOM.writeInt16(lightThresh);
+        USBCOM.writeInt32(lightThresh);
       break;
-      case 'S': // Stream sensor value (subsampling sensor datastream at 1kHz)
+      case 'M': // Set threshold mode and update thresholds
+        thresholdMode = USBCOM.readByte();
+      break;
+      case 'S': // Stream sensor value via USB
         isStreaming = USBCOM.readByte();
+        nSamplesAdded = 0;
         lastStreamingSampleTime = currentTime;
       break;
       case 'V': // Return contiguous raw sensor values
@@ -198,29 +211,29 @@ void loop() {
   }
 }
 
-uint16_t autoSetThreshold(byte thresholdIndex) { // Measure 1 second of light during a fixed screen state and set a threshold safely outside the noise
+uint32_t autoSetThreshold(byte thresholdIndex) { // Measure 1 second of light during a fixed screen state and set a threshold safely outside the noise
   // thresholdIndex = 0 (Light -> Dark threshold) or 1 (Dark -> Light threshold)
-  int16_t newThreshold = 0;
-  int16_t minValue = 65535;
-  int16_t maxValue = -65535;
+  int32_t newThreshold = 0;
+  int32_t minValue = 65535;
+  int32_t maxValue = -65535;
   uint32_t nSamplesToMeasure = 40000; // 2 seconds at 20kHz
   sampleReadyFlag = false;
   for (int i = 0; i < nSamplesToMeasure; i++) {
-    while (sampleReadyFlag == false) {} // Wait for hardware timer to call readNewSample() and update avgLightDiff
+    while (sampleReadyFlag == false) {} // Wait for hardware timer to call readNewSample() and update lightMeasure2Threshold
     sampleReadyFlag = false; // Reset flag
-    if (avgLightDiff > maxValue) {
-      maxValue = avgLightDiff;
+    if (lightMeasure2Threshold > maxValue) {
+      maxValue = lightMeasure2Threshold;
     }
-    if (avgLightDiff < minValue) {
-      minValue = avgLightDiff;
+    if (lightMeasure2Threshold < minValue) {
+      minValue = lightMeasure2Threshold;
     }
   }
   switch (thresholdIndex) {
     case 0: // Dark threshold
-      newThreshold = minValue*2; // 2x of largest measured negative sliding window average change in light intensity
+      newThreshold = minValue*2; // In threshold mode 0: 2x of largest measured negative sliding window average change in light intensity
     break;
     case 1: // Light threshold
-      newThreshold = maxValue*2; // 2x of largest measured positive sliding window average change in light intensity
+      newThreshold = maxValue*2; // In threshold mode 0: 2x of largest measured positive sliding window average change in light intensity
     break;
   }
   return newThreshold;

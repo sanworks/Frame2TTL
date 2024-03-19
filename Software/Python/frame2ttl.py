@@ -2,7 +2,7 @@
 ----------------------------------------------------------------------------
 
 This file is part of the Sanworks Frame2TTL repository
-Copyright (C) 2023 Sanworks LLC, Rochester, New York, USA
+Copyright (C) Sanworks LLC, Rochester, New York, USA
 
 ----------------------------------------------------------------------------
 
@@ -21,13 +21,20 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 Usage:
 Initialize:
-F = Frame2TTL('COM3') # Where COM3 is the Frame2TTL device's usb serial port
+F = Frame2TTL('COM3')  # Where COM3 is the Frame2TTL device's usb serial port
+F.detect_mode = 0      # Determines how light signal is processed to detect sync patch transitions.
+                       # In mode 0, a 1ms sliding window average of sample-wise changes in luminance
+                       # is compared with a threshold.
+                       # In mode 1, light intensity is compared with a fixed light intensity threshold.
 F.dark_threshold = -75 # Set the threshold for detecting a light -> dark sync patch transition.
-                         Units are bits / ms, a 1ms sliding window average of sample-wise change in luminance
+                       # If threshold_mode = 0, units are avg bits / ms, computed from a 1ms sliding window average of
+                       # sample-wise change in luminance.
+                       # If threshold_mode = 1, units are bits of light intensity
 F.set_dark_threshold_auto()  # Automatically set the dark threshold, while the sync patch is white at max intensity
 sensorValue = F.read_sensor()  # Return the light sensor's current luminance measurement. Units are bits in range 0, 2^16
 sensorValues = F.read_sensor(1000)  # Return 1000 consecutive luminance measurements from the sensor
-F.stream_ui() # Launches a GUI window to view the raw sensor data
+F.stream_ui() # Launches a live streaming plot of the raw sensor data for diagnostics and to assist with
+              # threshold setting in detect_mode 1
 
 Disconnect:
 del F
@@ -45,7 +52,7 @@ from arcom import ArCom  # ArCOM wraps PySerial to simplify transactions of nump
 
 # Constants
 MIN_SUPPORTED_HARDWARE = 2
-MIN_SUPPORTED_FIRMWARE = 2
+MIN_SUPPORTED_FIRMWARE = 4
 HANDSHAKE_BYTE = 218
 
 
@@ -85,12 +92,9 @@ class Frame2TTL:
             self.port = ArCom(port_name, 480000000)
 
         # Set default thresholds
-        if self._hardware_version == 2:
-            self._light_threshold = 100
-            self._dark_threshold = -150
-        elif self._hardware_version == 3:
-            self._light_threshold = 75
-            self._dark_threshold = -75
+        self._light_threshold = 75
+        self._dark_threshold = -75
+        self.detect_mode = 0
 
     @property
     def light_threshold(self):
@@ -100,7 +104,12 @@ class Frame2TTL:
     def light_threshold(self, value):
         if value <= 0 or not isinstance(value, int):
             raise Frame2TTLError('Error: light_threshold must be a positive integer.')
-        self.port.write(ord('T'), 'uint8', [value, self._dark_threshold], 'int16')
+        if self.detect_mode == 1:
+            if not ((value >= 0) and (value <= 65535)):
+                raise Frame2TTLError('Error: in detect_mode 1, light_threshold must be in range [0, 65535].')
+            if value <= self.dark_threshold:
+                raise Frame2TTLError('Error: in detect_mode 1, light_threshold must be higher than dark_threshold.')
+        self.port.write(ord('T'), 'uint8', value, 'int32')
         self._light_threshold = value
 
     @property
@@ -109,22 +118,43 @@ class Frame2TTL:
 
     @dark_threshold.setter
     def dark_threshold(self, value):
-        if value >= 0 or not isinstance(value, int):
+        if (self.detect_mode == 0 and value >= 0) or not isinstance(value, int):
             raise Frame2TTLError('Error: dark_threshold must be a negative integer.')
-        self.port.write(ord('T'), 'uint8', [self._light_threshold, value], 'int16')
+        if self.detect_mode == 1:
+            if not ((value >= 0) and (value <= 65535)):
+                raise Frame2TTLError('Error: in detect_mode 1, dark_threshold must be in range [0, 65535].')
+            if value >= self.light_threshold:
+                raise Frame2TTLError('Error: in detect_mode 1, dark_threshold must be lower than light_threshold.')
+        self.port.write(ord('K'), 'uint8', value, 'int32')
         self._dark_threshold = value
+
+    @property
+    def detect_mode(self):
+        return self._detect_mode
+
+    @detect_mode.setter
+    def detect_mode(self, value):
+        if value not in [0, 1]:
+            raise Frame2TTLError('Error: threshold_mode must be either 0 or 1.')
+        self.port.write((ord('M'), value), 'uint8')
+        self._detect_mode = value
+        self._set_threshold_defaults(value)
 
     def set_dark_threshold_auto(self):
         """Auto-set threshold for detecting light --> dark transitions. Run with the sync patch set to WHITE."""
+        if self.detect_mode == 1:
+            raise Frame2TTLError('Error: Automatic threshold detection is only available for detect_mode 0.')
         self.port.write(ord('D'), 'uint8')
         time.sleep(3)  # The instrument measures for ~2.5 seconds and calculates the new threshold
-        self._dark_threshold = self.port.read(1, 'int16')
+        self._dark_threshold = self.port.read(1, 'int32')
 
     def set_light_threshold_auto(self):
         """Auto-set threshold for detecting dark --> light transitions. Run with the sync patch set to BLACK."""
+        if self.detect_mode == 1:
+            raise Frame2TTLError('Error: Automatic threshold detection is only available for detect_mode 0.')
         self.port.write(ord('L'), 'uint8')
         time.sleep(3)  # The instrument measures for ~2.5 seconds and calculates the new threshold
-        self._light_threshold = self.port.read(1, 'int16')
+        self._light_threshold = self.port.read(1, 'int32')
 
     def read_sensor(self, n_samples=1):
         """Returns raw light measurements from the sensor."""
@@ -141,9 +171,22 @@ class Frame2TTL:
         else:
             self.qt_app = QtWidgets.QApplication.instance()
 
-        self.qt_main = MainWindow(self.port)
+        self.qt_main = MainWindow(self.port, (self._light_threshold, self._dark_threshold), self.detect_mode)
         self.qt_main.show()
+        self.qt_main.activateWindow()
         self.qt_app.exec_()
+
+    def _set_threshold_defaults(self, detect_mode):
+        if detect_mode == 0:
+            if self._hardware_version == 2:
+                self.light_threshold = 100
+                self.dark_threshold = -150
+            elif self._hardware_version == 3:
+                self.light_threshold = 75
+                self.dark_threshold = -75
+        elif detect_mode == 1:
+            self.light_threshold = 30000
+            self.dark_threshold = 20000
 
     # Self-description when the object is entered into the Python console with no properties or methods specified
     def __repr__(self):
@@ -151,6 +194,7 @@ class Frame2TTL:
                 'Port: ArCOMObject(' + self.port.serialObject.port + ')' + '\n'
                 '_hardware_version: ' + str(self._hardware_version) + '\n'
                 '_firmware_version: ' + str(self._firmware_version) + '\n'
+                'detect_mode: ' + str(self._detect_mode) + '\n'
                 'light_threshold: ' + str(self._light_threshold) + '\n'
                 'dark_threshold: ' + str(self._dark_threshold) + '\n'
                 )
@@ -165,7 +209,7 @@ class Frame2TTLError(Exception):
 
 class MainWindow(QtWidgets.QMainWindow):
     """Class to create and update the live sensor plot."""
-    def __init__(self, serial_port, *args, **kwargs):
+    def __init__(self, serial_port, thresholds, detect_mode, *args, **kwargs):
         super().__init__()
 
         self.setWindowTitle("Frame2TTL")
@@ -199,6 +243,16 @@ class MainWindow(QtWidgets.QMainWindow):
         self.plotWidget.setLabel('left', "<span style=\"font-size:14pt\">Sensor Value (Bits)</span>", **styles)
         self.plotWidget.setLabel('bottom', "<span style=\"font-size:14pt\">Time (s)</span>", **styles)
         self.plotWidget.setYRange(0, 65535)
+
+        if detect_mode == 1:
+            # Add threshold lines
+            x_points = [0, 2]
+            y_points = [thresholds[0], thresholds[0]]
+            line_pen = pg.mkPen(color=(255, 204, 0), width=2, style=pg.QtCore.Qt.DashLine)
+            self.plotWidget.plot(x_points, y_points, pen=line_pen)
+            y_points = [thresholds[1], thresholds[1]]
+            line_pen = pg.mkPen(color=(128, 128, 128), width=2, style=pg.QtCore.Qt.DashLine)
+            self.plotWidget.plot(x_points, y_points, pen=line_pen)
 
         #  Set up and start the plot update timer
         self.timer = QtCore.QTimer()

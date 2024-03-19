@@ -2,7 +2,7 @@
 ----------------------------------------------------------------------------
 
 This file is part of the Sanworks Frame2TTL repository
-Copyright (C) 2023 Sanworks LLC, Rochester, New York, USA
+Copyright (C) Sanworks LLC, Rochester, New York, USA
 
 ----------------------------------------------------------------------------
 
@@ -26,7 +26,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 from frame2ttl import Frame2TTL
 
 # ----- Set the line below to match the valve driver's port on your system
-usb_port_name = 'COM6'
+usb_port_name = 'COM3'
 # -----
 
 F = Frame2TTL(usb_port_name)  # Create an instance of the Frame2TTL device
@@ -35,7 +35,7 @@ F.dark_threshold = -75  # Set the threshold for sync patch light --> dark detect
 current_sensor_value = F.read_sensor()  # Read the current value of the sensor
 print('Frame2TTL Connected. Current sensor value = ' + str(current_sensor_value))
 print('Close the live plot to exit the demo.')
-F.stream_ui()
+F.stream_ui()  # Run a live plot to assist with setting thresholds and for diagnostics.
 
 del F
 print('Frame2TTL Disconnected.')
