@@ -214,6 +214,9 @@ classdef Frame2TTL < handle
 
         function set.DetectMode(obj, newMode)
             originalMode = obj.DetectMode;
+            if obj.HardwareVersion == 2 && newMode == 0
+                error('DetectMode 0 is not supported on Frame2TTL v2.')
+            end
             if obj.FirmwareVersion > 3
                 obj.Port.write(['M' newMode], 'uint8');
                 obj.DetectMode = newMode;
