@@ -28,7 +28,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 % luminance instead of a simple luminance threshold improves performance on
 % skipped frames.
 %
-% Installation:
+% Hardware Installation:
 % 1. Connect the Frame2TTL device to the computer with a USB micro cable.
 % 2. Connect the Frame2TTL device BNC connectors to an oscilloscope for
 %    testing, or to your acquisition system input for data collection.
@@ -60,14 +60,15 @@ classdef Frame2TTL < handle
         LightThreshold  % Threshold to indicate a dark -> light frame transition
         DarkThreshold   % Threshold to indicate a light -> dark frame transition
         DetectMode      % Determines how light signal is processed to detect sync patch transitions.
-                        % 0: avg sample-wise change in luminance exceeds threshold
-                        % 1: raw luminance measurement (0-65535) exceeds threshold
-        AcquiredData
+                        % 0: raw luminance measurement (0-65535) exceeds threshold
+                        % 1 (default): avg sample-wise change in luminance exceeds threshold
+
+        AcquiredData    % A struct with sensor data acquired on most recent call to streamUI()
     end
     properties (Access = private)
-        CurrentFirmware = 4; % Latest firmware
-        MinSupportedFirmware = 3; % Minimum supported firmware
-        Timer % MATLAB timer (for reading data from the serial buffer during USB streaming)
+        currentFirmware = 4; % Latest firmware
+        minSupportedFirmware = 3; % Minimum supported firmware
+        readTimer % MATLAB timer (for reading data from the serial buffer during USB streaming)
         streaming = 0; % 0 if idle, 1 if streaming data
         gui = struct; % Handles for GUI elements
         nDisplaySamples = 200; % When streaming to plot, show up to 200 samples
@@ -101,17 +102,17 @@ classdef Frame2TTL < handle
             obj.Port.write('F', 'uint8');
             pause(.25)
             if obj.Port.bytesAvailable == 0 % Firmware v1 does not respond to command 'F'
-                error(['Old Frame2TTL firmware detected. Please update to firmware v'... 
-                      num2str(obj.MinSupportedFirmware) ' or newer.'])
+                error(['Old Frame2TTL firmware detected. Please update to firmware v'...
+                    num2str(obj.minSupportedFirmware) ' or newer.'])
             end
             obj.FirmwareVersion = obj.Port.read(1, 'uint8');
-            if obj.FirmwareVersion < obj.MinSupportedFirmware
-                error(['Old Frame2TTL firmware detected, v' num2str(obj.FirmwareVersion)... 
-                      '. Please update to firmware v' num2str(obj.CurrentFirmware) '.'])
+            if obj.FirmwareVersion < obj.minSupportedFirmware
+                error(['Old Frame2TTL firmware detected, v' num2str(obj.FirmwareVersion)...
+                    '. Please update to firmware v' num2str(obj.currentFirmware) '.'])
             end
-            if obj.FirmwareVersion < obj.CurrentFirmware
-                warning(['Old Frame2TTL firmware detected, v' num2str(obj.FirmwareVersion)... 
-                        '. Please update to firmware v' num2str(obj.CurrentFirmware) ' at your earliest convenience.'])
+            if obj.FirmwareVersion < obj.currentFirmware
+                warning(['Old Frame2TTL firmware detected, v' num2str(obj.FirmwareVersion)...
+                    '. Please update to firmware v' num2str(obj.currentFirmware) ' at your earliest convenience.'])
             end
 
             % Read hardware version
@@ -121,7 +122,7 @@ classdef Frame2TTL < handle
                 obj.Port = [];
                 obj.Port = ArCOMObject_Frame2TTL(portString, 480000000);
             end
-            
+
             % Set default thresholds
             if obj.FirmwareVersion > 3
                 obj.initialized = true;
@@ -129,7 +130,7 @@ classdef Frame2TTL < handle
             else
                 obj.thresholdDatatype = 'int16';
             end
-            obj.DetectMode = 0;
+            obj.DetectMode = 1;
             obj.setThresholds2Default;
 
             if obj.FirmwareVersion < 4 % Earlier firmware versions use a single op to set thresholds
@@ -140,16 +141,16 @@ classdef Frame2TTL < handle
 
         function set.LightThreshold(obj, thresh)
             if obj.initialized
-                if obj.DetectMode == 1 
+                if obj.DetectMode == 0
                     if thresh <= obj.DarkThreshold
-                        error('In DetectMode 1, LightThreshold cannot be set lower than DarkThreshold.')
+                        error('In DetectMode 0, LightThreshold cannot be set lower than DarkThreshold.')
                     end
                     if thresh < 0 || thresh > 65535
-                        error('In DetectMode 1, thresholds must be in range [0, 65535].')
+                        error('In DetectMode 0, thresholds must be in range [0, 65535].')
                     end
-                elseif obj.DetectMode == 0 
+                elseif obj.DetectMode == 1
                     if thresh <= 0
-                        error('In DetectMode 0, LightThreshold cannot be set <= 0.')
+                        error('In DetectMode 1, LightThreshold cannot be set <= 0.')
                     end
                 end
                 if obj.FirmwareVersion < 4
@@ -163,16 +164,16 @@ classdef Frame2TTL < handle
 
         function set.DarkThreshold(obj, thresh)
             if obj.initialized
-                if obj.DetectMode == 1 
+                if obj.DetectMode == 0
                     if thresh >= obj.LightThreshold
-                        error('In DetectMode 1, DarkThreshold cannot be set higher than LightThreshold.')
+                        error('In DetectMode 0, DarkThreshold cannot be set higher than LightThreshold.')
                     end
                     if thresh < 0 || thresh > 65535
-                        error('In DetectMode 1, thresholds must be in range [0, 65535].')
+                        error('In DetectMode 0, thresholds must be in range [0, 65535].')
                     end
-                elseif obj.DetectMode == 0 
+                elseif obj.DetectMode == 1
                     if thresh >= 0
-                        error('In DetectMode 0, DarkThreshold cannot be set >= 0.')
+                        error('In DetectMode 1, DarkThreshold cannot be set >= 0.')
                     end
                 end
                 if obj.FirmwareVersion < 4
@@ -204,9 +205,9 @@ classdef Frame2TTL < handle
         end
 
         function setDarkThreshold_Auto(obj)
-            if obj.DetectMode == 1
-                error(['Automatic threshold detection is only available for DetectMode 0.' char(10)... 
-                       'In DetectMode 1, set thresholds manually, guided by streamUI().'])
+            if obj.DetectMode == 0
+                error(['Automatic threshold detection is only available for DetectMode 1.' char(10)...
+                    'In DetectMode 0, set thresholds manually, guided by streamUI().'])
             end
             obj.Port.write('D', 'uint8');
             pause(3);
@@ -214,9 +215,9 @@ classdef Frame2TTL < handle
         end
 
         function setLightThreshold_Auto(obj)
-            if obj.DetectMode == 1
-                error(['Automatic threshold detection is only available for DetectMode 0.' char(10)... 
-                       'In DetectMode 1, set thresholds manually, guided by streamUI().'])
+            if obj.DetectMode == 0
+                error(['Automatic threshold detection is only available for DetectMode 1.' char(10)...
+                    'In DetectMode 0, set thresholds manually, guided by streamUI().'])
             end
             obj.Port.write('L', 'uint8');
             pause(3);
@@ -233,7 +234,7 @@ classdef Frame2TTL < handle
             set(gca, 'xlim', [0 obj.maxDisplayTime], 'ylim', [0 65536]);
             Xdata = nan(1,obj.nDisplaySamples); Ydata = nan(1,obj.nDisplaySamples);
             obj.gui.OscopeDataLine = line([Xdata,Xdata],[Ydata,Ydata]);
-            if obj.DetectMode == 1
+            if obj.DetectMode == 0
                 obj.gui.LightThreshLine = line([0,obj.maxDisplayTime],[obj.LightThreshold,obj.LightThreshold],...
                     'Color', [1 0.8 0], 'LineStyle', '--');
                 obj.gui.DarkThreshLine = line([0,obj.maxDisplayTime],[obj.DarkThreshold,obj.DarkThreshold],...
@@ -243,10 +244,10 @@ classdef Frame2TTL < handle
             drawnow;
             obj.gui.DisplayPos = 1;
             obj.gui.AcquiredDataPos = 1;
-            obj.gui.SweepStartTime = 0; 
+            obj.gui.SweepStartTime = 0;
             obj.Port.write(['S' 1], 'uint8');
-            obj.Timer = timer('TimerFcn',@(h,e)obj.updatePlot(), 'ExecutionMode', 'fixedRate', 'Period', 0.05, 'Tag', ['F2TTL_' obj.Port.PortName]);
-            start(obj.Timer);
+            obj.readTimer = timer('TimerFcn',@(h,e)obj.updatePlot(), 'ExecutionMode', 'fixedRate', 'Period', 0.05, 'Tag', ['F2TTL_' obj.Port.PortName]);
+            start(obj.readTimer);
         end
 
         function delete(obj)
@@ -260,9 +261,9 @@ classdef Frame2TTL < handle
     methods (Access = private)
         function endAcq(obj)
             try
-                stop(obj.Timer);
-                delete(obj.Timer);
-                obj.Timer = [];
+                stop(obj.readTimer);
+                delete(obj.readTimer);
+                obj.readTimer = [];
             catch
             end
             obj.Port.write(['S' 0], 'uint8');
@@ -274,7 +275,7 @@ classdef Frame2TTL < handle
             end
             obj.AcquiredData = obj.AcquiredData(1:obj.gui.AcquiredDataPos);
         end
-        
+
         function updatePlot(obj)
             BytesAvailable = obj.Port.bytesAvailable;
             if BytesAvailable > 1
@@ -306,6 +307,9 @@ classdef Frame2TTL < handle
         function setThresholds2Default(obj)
             switch obj.DetectMode
                 case 0
+                    obj.LightThreshold = 30000;
+                    obj.DarkThreshold = 20000;
+                case 1
                     switch obj.HardwareVersion
                         case 2
                             obj.LightThreshold = 100;
@@ -313,15 +317,6 @@ classdef Frame2TTL < handle
                         case 3
                             obj.LightThreshold = 75;
                             obj.DarkThreshold = -75;
-                    end
-                case 1
-                    switch obj.HardwareVersion
-                        case 2
-                            obj.LightThreshold = 30000;
-                            obj.DarkThreshold = 20000;
-                        case 3
-                            obj.LightThreshold = 30000;
-                            obj.DarkThreshold = 20000;
                     end
             end
         end

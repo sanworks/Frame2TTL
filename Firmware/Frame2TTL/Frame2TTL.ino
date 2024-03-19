@@ -61,7 +61,7 @@ volatile int16_t avgLightDiff = 0; // Sliding window average of sample-wise chan
 int32_t lightThresh = 75; // Average change in luminance necessary to transition to "inPulse" state
 int32_t darkThresh = -75; // Average change in luminance necessary to transition from "inPulse" state
 volatile int32_t lightMeasure2Threshold = 0; // Measurement of light to compare against threshold for detection
-uint8_t thresholdMode = 0; // Threshold mode. 0 = moving average of sample-wise change in luminance. 1 = absolute luminance
+uint8_t detectMode = 1; // Frame transition detect mode. 0 = absolute luminance. 1 = sliding window average of sample-wise change in luminance. 
 
 // State Variables
 boolean inPulse = false; // True if the output sync line is high
@@ -111,7 +111,7 @@ void readNewSample() {
   #endif
   
 // Compute avgLightDiff, the sliding window average of sample-wise change in light level
-  if (thresholdMode == 0) {
+  if (detectMode == 1) {
     memcpy(sampleBuffer, &sampleBuffer[1], sizeof(sampleBuffer)-2);
     sampleBuffer[windowSize-1] = sensorValue;
     total = 0;
@@ -170,7 +170,7 @@ void loop() {
         USBCOM.writeInt32(lightThresh);
       break;
       case 'M': // Set threshold mode and update thresholds
-        thresholdMode = USBCOM.readByte();
+        detectMode = USBCOM.readByte();
       break;
       case 'S': // Stream sensor value via USB
         isStreaming = USBCOM.readByte();
