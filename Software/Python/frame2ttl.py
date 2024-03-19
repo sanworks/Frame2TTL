@@ -95,7 +95,11 @@ class Frame2TTL:
         # Set default detection parameters
         self._light_threshold = 75
         self._dark_threshold = -75
+        self._activation_margin = 1000
         self.detect_mode = 1
+
+        # Program the default threshold activation margin (units = bits, used only in detect_mode 0)
+        self.port.write(ord('G'), 'uint8', self._activation_margin, 'uint32')
 
     @property
     def light_threshold(self):
@@ -106,10 +110,12 @@ class Frame2TTL:
         if value <= 0 or not isinstance(value, int):
             raise Frame2TTLError('Error: light_threshold must be a positive integer.')
         if self.detect_mode == 0:
-            if not ((value >= 0) and (value <= 65535)):
-                raise Frame2TTLError('Error: in detect_mode 0, light_threshold must be in range [0, 65535].')
-            if value <= self.dark_threshold:
-                raise Frame2TTLError('Error: in detect_mode 0, light_threshold must be higher than dark_threshold.')
+            maxThresh = 65535 - self._activation_margin
+            if not ((value >= self._activation_margin) and (value <= 65535)):
+                raise Frame2TTLError('Error: in detect_mode 0, light_threshold must be in range ['
+                                     + str(self._activation_margin) + ', ' + str(maxThresh) + '].')
+            if value >= self.dark_threshold:
+                raise Frame2TTLError('Error: in detect_mode 0, light_threshold must be lower than dark_threshold.')
         self.port.write(ord('T'), 'uint8', value, 'int32')
         self._light_threshold = value
 
@@ -122,10 +128,12 @@ class Frame2TTL:
         if (self.detect_mode == 1 and value >= 0) or not isinstance(value, int):
             raise Frame2TTLError('Error: dark_threshold must be a negative integer.')
         if self.detect_mode == 0:
-            if not ((value >= 0) and (value <= 65535)):
-                raise Frame2TTLError('Error: in detect_mode 0, dark_threshold must be in range [0, 65535].')
-            if value >= self.light_threshold:
-                raise Frame2TTLError('Error: in detect_mode 0, dark_threshold must be lower than light_threshold.')
+            maxThresh = 65535-self._activation_margin
+            if not ((value >= 0) and (value <= maxThresh)):
+                raise Frame2TTLError('Error: in detect_mode 0, dark_threshold must be in range [' +
+                                     str(self._activation_margin) + ', ' + str(maxThresh) + '].')
+            if value <= self.light_threshold:
+                raise Frame2TTLError('Error: in detect_mode 0, dark_threshold must be higher than light_threshold.')
         self.port.write(ord('K'), 'uint8', value, 'int32')
         self._dark_threshold = value
 
@@ -179,8 +187,8 @@ class Frame2TTL:
 
     def _set_threshold_defaults(self, detect_mode):
         if detect_mode == 0:
-            self.light_threshold = 30000
-            self.dark_threshold = 20000
+            self.dark_threshold = 30000
+            self.light_threshold = 20000
         elif detect_mode == 1:
             if self._hardware_version == 2:
                 self.light_threshold = 100

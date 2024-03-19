@@ -62,9 +62,13 @@ int32_t lightThresh = 75; // Average change in luminance necessary to transition
 int32_t darkThresh = -75; // Average change in luminance necessary to transition from "inPulse" state
 volatile int32_t lightMeasure2Threshold = 0; // Measurement of light to compare against threshold for detection
 uint8_t detectMode = 1; // Frame transition detect mode. 0 = absolute luminance. 1 = sliding window average of sample-wise change in luminance. 
+int32_t lightActivationThresh = 0; // Threshold for activation of the light threshold in detectMode 0
+int32_t darkActivationThresh = 0; // Threshold for activation of the dark threshold in detectMode 0
+uint32_t activationMargin = 1000; // Number of bits beyond each threshold for threshold activation in detectMode 0
 
 // State Variables
 boolean inPulse = false; // True if the output sync line is high
+boolean thresholdActive = true; // True if the threshold is active
 boolean isStreaming = false; // True if streaming output to MATLAB
 volatile boolean sampleReadyFlag = false; // True if a sample has been read
 
@@ -126,20 +130,32 @@ void readNewSample() {
   
   // Detect light patch transition events and set sync state
   if (inPulse == false) {
-    if (lightMeasure2Threshold > lightThresh) {
+    if ((lightMeasure2Threshold > lightThresh) && thresholdActive) {
       inPulse = true;
+      if (detectMode == 0) {
+        thresholdActive = false;
+      }
       #if HARDWARE_VERSION == 2
         digitalWrite(TTL_OUTPUT_LINE, HIGH);
       #endif
       dacValue.uint16[0] = 54067;
     }
+    if (lightMeasure2Threshold < lightActivationThresh) {
+      thresholdActive = true;
+    }
   } else {
-    if (lightMeasure2Threshold < darkThresh) {
+    if ((lightMeasure2Threshold < darkThresh) && thresholdActive) {
       inPulse = false;
+      if (detectMode == 0) {
+        thresholdActive = false;
+      }
       #if HARDWARE_VERSION == 2
         digitalWrite(TTL_OUTPUT_LINE, LOW);
       #endif
       dacValue.uint16[0] = 0;
+    }
+    if (lightMeasure2Threshold > darkActivationThresh) {
+      thresholdActive = true;
     }
   }
   #if HARDWARE_VERSION == 3
@@ -155,11 +171,13 @@ void loop() {
       case 'C': // Confirm USB connection
         USBCOM.writeByte(218);
       break;
-      case 'T': // Set Light + Dark Thresholds (Manual)
+      case 'T': // Set Light Threshold (Manual)
         lightThresh = USBCOM.readInt32();
+        lightActivationThresh = lightThresh - activationMargin;
       break;
       case 'K': // Set Dark Threshold (Manual)
         darkThresh = USBCOM.readInt32();
+        darkActivationThresh = darkThresh + activationMargin;
       break;
       case 'D': // Set Dark Threshold (Automatic; measured with sync patch on to ensure that on -> off transition is below noise)
         darkThresh = autoSetThreshold(0);
@@ -171,6 +189,9 @@ void loop() {
       break;
       case 'M': // Set threshold mode and update thresholds
         detectMode = USBCOM.readByte();
+      break;
+      case 'G': // Set threshold activation margin (in bits). In detect mode 0, thresholds are inactive until light passes threshold by this margin
+        activationMargin = USBCOM.readUint32();
       break;
       case 'S': // Stream sensor value via USB
         isStreaming = USBCOM.readByte();

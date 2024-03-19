@@ -60,7 +60,7 @@ classdef Frame2TTL < handle
         LightThreshold  % Threshold to indicate a dark -> light frame transition
         DarkThreshold   % Threshold to indicate a light -> dark frame transition
         DetectMode      % Determines how light signal is processed to detect sync patch transitions.
-                        % 0: raw luminance measurement (0-65535) exceeds threshold
+                        % 0: detect when raw luminance measurement (0-65535) exceeds threshold
                         % 1 (default): avg sample-wise change in luminance exceeds threshold
 
         AcquiredData    % A struct with sensor data acquired on most recent call to streamUI()
@@ -75,6 +75,8 @@ classdef Frame2TTL < handle
         maxDisplayTime = 2; % When streaming to plot, show up to last 2 seconds
         initialized = false; % Set to true after the constructor finishes executing
         thresholdDatatype = 'int16'; % Datatype of threshold (will be set to match firmware version)
+        activationMargin = 1000; % In DetectMode 0, thresholds are initially inactive until the
+                                 % sensor value exceeds threshold by this amount (units = bits)
     end
     methods
         function obj = Frame2TTL(portString)
@@ -137,16 +139,23 @@ classdef Frame2TTL < handle
                 obj.Port.write('T', 'uint8', [obj.LightThreshold obj.DarkThreshold], 'int16');
                 obj.initialized = true;
             end
+            
+            % Set default threshold activation margin (for use in DetectMode 0)
+            if obj.FirmwareVersion > 3
+                obj.Port.write('G', 'uint8', obj.activationMargin, 'uint32');
+            end
         end
 
         function set.LightThreshold(obj, thresh)
             if obj.initialized
                 if obj.DetectMode == 0
-                    if thresh <= obj.DarkThreshold
-                        error('In DetectMode 0, LightThreshold cannot be set lower than DarkThreshold.')
+                    maxThresh = 65535-obj.activationMargin;
+                    if thresh >= obj.DarkThreshold
+                        error('In DetectMode 0, LightThreshold cannot be set higher than DarkThreshold.')
                     end
-                    if thresh < 0 || thresh > 65535
-                        error('In DetectMode 0, thresholds must be in range [0, 65535].')
+                    if thresh < obj.activationMargin || thresh > 65535
+                        error(['In DetectMode 0, thresholds must be in range [' num2str(obj.activationMargin)... 
+                               ', ' num2str(maxThresh) '].'])
                     end
                 elseif obj.DetectMode == 1
                     if thresh <= 0
@@ -165,11 +174,13 @@ classdef Frame2TTL < handle
         function set.DarkThreshold(obj, thresh)
             if obj.initialized
                 if obj.DetectMode == 0
-                    if thresh >= obj.LightThreshold
-                        error('In DetectMode 0, DarkThreshold cannot be set higher than LightThreshold.')
+                    if thresh <= obj.LightThreshold
+                        error('In DetectMode 0, DarkThreshold cannot be set lower than LightThreshold.')
                     end
-                    if thresh < 0 || thresh > 65535
-                        error('In DetectMode 0, thresholds must be in range [0, 65535].')
+                    maxThresh = 65535-obj.activationMargin;
+                    if thresh < 0 || thresh > maxThresh
+                        error(['In DetectMode 0, thresholds must be in range [' nu2mstr(obj.activationMargin)... 
+                               ', ' num2str(maxThresh) '].'])
                     end
                 elseif obj.DetectMode == 1
                     if thresh >= 0
@@ -307,8 +318,8 @@ classdef Frame2TTL < handle
         function setThresholds2Default(obj)
             switch obj.DetectMode
                 case 0
-                    obj.LightThreshold = 30000;
-                    obj.DarkThreshold = 20000;
+                    obj.DarkThreshold = 30000;
+                    obj.LightThreshold = 20000;
                 case 1
                     switch obj.HardwareVersion
                         case 2
