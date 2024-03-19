@@ -68,7 +68,7 @@ uint32_t activationMargin = 1000; // Number of bits beyond each threshold for th
 
 // State Variables
 boolean inPulse = false; // True if the output sync line is high
-boolean thresholdActive = true; // True if the threshold is active
+boolean thresholdActive = false; // True if the threshold is active
 boolean isStreaming = false; // True if streaming output to MATLAB
 volatile boolean sampleReadyFlag = false; // True if a sample has been read
 
