@@ -52,8 +52,7 @@ import math
 from arcom import ArCom  # ArCOM wraps PySerial to simplify transactions of numpy data types
 
 # Constants
-MIN_SUPPORTED_HARDWARE = 2
-MIN_SUPPORTED_FIRMWARE = 4
+CURRENT_FIRMWARE = 4
 HANDSHAKE_BYTE = 218
 
 
@@ -80,9 +79,12 @@ class Frame2TTL:
         if self.port.bytes_available() == 0:
             old_firmware_found = 1
         self._firmware_version = self.port.read(1, 'uint8')
-        if old_firmware_found or self._firmware_version < MIN_SUPPORTED_FIRMWARE:
+        if old_firmware_found or self._firmware_version < CURRENT_FIRMWARE:
             raise Frame2TTLError('Error: Old Frame2TTL firmware detected. Update to firmware v' +
-                                 str(MIN_SUPPORTED_FIRMWARE) + ' or newer.')
+                                 str(CURRENT_FIRMWARE) + ' or newer.')
+        if self._firmware_version > CURRENT_FIRMWARE:
+            raise Frame2TTLError('Error: Future Frame2TTL firmware detected. Downgrade to firmware v' +
+                                 str(CURRENT_FIRMWARE) + ' or update Frame2TTL software.')
 
         # Verify hardware version
         self.port.write(ord('#'), 'uint8')  # Request HW version.
