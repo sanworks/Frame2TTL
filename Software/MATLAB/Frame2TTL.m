@@ -18,15 +18,21 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 %}
 
-% Frame2TTLv3 is a system to measure the instant when a computer monitor updates its display.
-% It uses a light sensor that outputs light intensity as an analog signal. The
-% voltage of the signal encodes light intensity. You can gain intuition for
-% the sensor output using the streamUI() function below.
+% Frame2TTLv3 is a tool to measure the instant when a PC monitor updates its display.
+% It uses a light sensor that encodes light intensity as an analog voltage signal. 
+% You can gain intuition for the sensor output using the streamUI() streaming GUI method 
+% below. The light sensor is fixed to a square patch of the display where
+% a sync signal is rendered by the user. Each successive frame alternates between black
+% and white. The sensor detects the white->black and black->white transitions, and outputs 
+% a TTL signal to indicate which patch is currently displayed.
 %
-% Thresholds for detection are in units of change in light intensity, computed by a 1ms sliding
-% window average (20 samples measured 50μs apart). Using change in
-% luminance instead of a simple luminance threshold improves performance on
-% skipped frames.
+% Two modes for frame detection are implemented.
+% Mode 0: The current light level is compared with separate light level thresholds
+%         to detect light->dark and dark->light.
+% Mode 1: (default) The device computes a signed 1ms sliding window average of sample-wise 
+%         change in light intensity. The average change in light intensity is compared to a detection 
+%         threshold. Using change in luminance instead of a simple luminance threshold improves 
+%         performance on skipped frames, and on LCD displays with slow light-to-dark transition times.
 %
 % Hardware Installation:
 % 1. Connect the Frame2TTL device to the computer with a USB micro cable.
@@ -50,7 +56,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 %
 % - To use the device, alternate the patch of pixels underneath the sensor
 %   between white and black with each frame in your video stimulus. For
-%   white, use maximum pixel intensity (standard sensor) or half pixel intensity (IBL sensor).
+%   white, use maximum pixel intensity (standard sensor) or 65% pixel intensity (IBL sensor).
 
 classdef Frame2TTL < handle
     properties
@@ -108,6 +114,8 @@ classdef Frame2TTL < handle
                     num2str(obj.minSupportedFirmware) ' or newer.'])
             end
             obj.FirmwareVersion = obj.Port.read(1, 'uint8');
+
+            % Verify firmware version
             if obj.FirmwareVersion < obj.minSupportedFirmware
                 error(['Old Frame2TTL firmware detected, v' num2str(obj.FirmwareVersion) '.' char(10) ...
                     'Please update to firmware v' num2str(obj.currentFirmware) '.' char(10) ...
@@ -228,7 +236,7 @@ classdef Frame2TTL < handle
 
         function setDarkThreshold_Auto(obj)
             if obj.DetectMode == 0
-                error(['Automatic threshold detection is only available for DetectMode 1.' char(10)...
+                error(['Automatic threshold adjustment is only available for DetectMode 1.' char(10)...
                     'In DetectMode 0, set thresholds manually, guided by streamUI().'])
             end
             obj.Port.write('D', 'uint8');
@@ -238,7 +246,7 @@ classdef Frame2TTL < handle
 
         function setLightThreshold_Auto(obj)
             if obj.DetectMode == 0
-                error(['Automatic threshold detection is only available for DetectMode 1.' char(10)...
+                error(['Automatic threshold adjustment is only available for DetectMode 1.' char(10)...
                     'In DetectMode 0, set thresholds manually, guided by streamUI().'])
             end
             obj.Port.write('L', 'uint8');
@@ -251,8 +259,10 @@ classdef Frame2TTL < handle
             obj.streaming = 1;
             obj.gui.DisplayIntensities = nan(1,obj.nDisplaySamples);
             obj.gui.DisplayTimes = nan(1,obj.nDisplaySamples);
-            obj.gui.Fig  = figure('name','Sensor Stream','numbertitle','off', 'MenuBar', 'none', 'Resize', 'off', 'CloseRequestFcn', @(h,e)obj.endAcq());
-            obj.gui.Plot = axes('units','normalized', 'position',[.2 .2 .65 .65]); ylabel('Sensor value (bits)', 'FontSize', 18); xlabel('Time (s)', 'FontSize', 18);
+            obj.gui.Fig  = figure('name','Sensor Stream','numbertitle','off', 'MenuBar', 'none',... 
+                                  'Resize', 'off', 'CloseRequestFcn', @(h,e)obj.endAcq());
+            obj.gui.Plot = axes('units','normalized', 'position',[.2 .2 .65 .65]); 
+            ylabel('Sensor value (bits)', 'FontSize', 18); xlabel('Time (s)', 'FontSize', 18);
             set(gca, 'xlim', [0 obj.maxDisplayTime], 'ylim', [0 65536]);
             Xdata = nan(1,obj.nDisplaySamples); Ydata = nan(1,obj.nDisplaySamples);
             obj.gui.OscopeDataLine = line([Xdata,Xdata],[Ydata,Ydata]);
@@ -268,7 +278,8 @@ classdef Frame2TTL < handle
             obj.gui.AcquiredDataPos = 1;
             obj.gui.SweepStartTime = 0;
             obj.Port.write(['S' 1], 'uint8');
-            obj.readTimer = timer('TimerFcn',@(h,e)obj.updatePlot(), 'ExecutionMode', 'fixedRate', 'Period', 0.05, 'Tag', ['F2TTL_' obj.Port.PortName]);
+            obj.readTimer = timer('TimerFcn',@(h,e)obj.updatePlot(), 'ExecutionMode', 'fixedRate',... 
+                                  'Period', 0.05, 'Tag', ['F2TTL_' obj.Port.PortName]);
             start(obj.readTimer);
         end
 
@@ -321,7 +332,9 @@ classdef Frame2TTL < handle
                     obj.gui.DisplayIntensities(obj.gui.DisplayPos-nIntensities+1:obj.gui.DisplayPos) = NewIntensities;
                     obj.gui.DisplayTimes(obj.gui.DisplayPos-nIntensities+1:obj.gui.DisplayPos) = SweepTimes;
                 end
-                set(obj.gui.OscopeDataLine,'xdata',[obj.gui.DisplayTimes, obj.gui.DisplayTimes], 'ydata', [obj.gui.DisplayIntensities, obj.gui.DisplayIntensities]); drawnow;
+                set(obj.gui.OscopeDataLine,'xdata',[obj.gui.DisplayTimes, obj.gui.DisplayTimes],... 
+                                           'ydata', [obj.gui.DisplayIntensities, obj.gui.DisplayIntensities]); 
+                drawnow;
             end
             pause(.0001);
         end
