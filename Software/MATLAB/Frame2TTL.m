@@ -203,10 +203,13 @@ classdef Frame2TTL < handle
         end
 
         function set.DetectMode(obj, newMode)
+            originalMode = obj.DetectMode;
             if obj.FirmwareVersion > 3
                 obj.Port.write(['M' newMode], 'uint8');
                 obj.DetectMode = newMode;
-                obj.setThresholds2Default;
+                if newMode ~= originalMode
+                    obj.setThresholds2Default;
+                end
             else
                 obj.DetectMode = newMode;
             end

@@ -98,6 +98,9 @@ class Frame2TTL:
         self._light_threshold = 75
         self._dark_threshold = -75
         self._activation_margin = 1000
+        self._detect_mode = 1
+
+        # Initialize detect mode and thresholds
         self.detect_mode = 1
 
         # Program the default threshold activation margin (units = bits, used only in detect_mode 0)
@@ -145,11 +148,13 @@ class Frame2TTL:
 
     @detect_mode.setter
     def detect_mode(self, value):
+        original_mode = self._detect_mode;
         if value not in [0, 1]:
             raise Frame2TTLError('Error: threshold_mode must be either 0 or 1.')
         self.port.write((ord('M'), value), 'uint8')
         self._detect_mode = value
-        self._set_threshold_defaults(value)
+        if value != original_mode:
+            self._set_threshold_defaults(value)
 
     def set_dark_threshold_auto(self):
         """Auto-set threshold for detecting light --> dark transitions. Run with the sync patch set to WHITE."""
