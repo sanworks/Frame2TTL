@@ -19,6 +19,26 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 ----------------------------------------------------------------------------
 
+Frame2TTLv3 is a tool to measure the instant when a PC monitor updates its display.
+It uses a light sensor that encodes light intensity as an analog voltage signal.
+You can gain intuition for the sensor output using the streamUI() streaming GUI method
+below. The light sensor is fixed to a square patch of the display where
+a sync signal is rendered by the user. With each successive frame, a "sync patch" of
+pixels in the lower-left corner of the screen alternates between black and white.
+The sensor detects the white->black and black->white transitions, and outputs
+a TTL signal to indicate which patch is currently displayed.
+
+Hardware Installation:
+1. Connect the Frame2TTL device to the PC with a USB micro cable.
+%. Connect the Frame2TTL device BNC connectors to an oscilloscope for
+   testing, or to your acquisition system input for data collection.
+3. Fix the Frame2TTL sensor to the bottom-right corner of the screen.
+   *IMPORTANT* keep the entire cable at least 5cm away from any AC
+   electric lines in the rig, including speaker wires.
+   Frame2TTL uses a twisted sensor cable for some EMF resistance, but
+   ultimately the sensor signal is analog until it is digitized on the
+   circuit board, and is susceptible to EMF along the cable path.
+
 Usage:
 Initialize:
 F = Frame2TTL('COM3')  # Where COM3 is the Frame2TTL device's usb serial port
@@ -29,8 +49,10 @@ F.detect_mode = 1      # Determines how light signal is processed to detect sync
 F.dark_threshold = -75 # Set the threshold for detecting a light -> dark sync patch transition.
                        # If detect_mode = 0, units are bits of light intensity
                        # If detect_mode = 1 (default), units are average signed sample-wise change in bits
-                       # in a 1ms sliding window. Typical threshold values are in range [-150, 150]
-F.set_dark_threshold_auto()  # Automatically set the dark threshold, while the sync patch is white at max intensity
+                       # in a 1ms sliding window. Typical threshold values are in range [-100, 100]
+F.set_dark_threshold_auto()  # Automatically set the dark threshold, while the sync patch is
+                             # WHITE (standard sensor) or 65% pixel intensity (IBL sensor)
+F.set_light_threshold_auto()  # Automatically set the light threshold, while the sync patch is BLACK
 sensorValue = F.read_sensor()  # Return the light sensor's current luminance measurement.
                                # Units are bits in range [0, 65535]
 sensorValues = F.read_sensor(1000)  # Return 1000 consecutive luminance measurements from the sensor

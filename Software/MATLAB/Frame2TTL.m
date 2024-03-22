@@ -26,18 +26,16 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 % and white. The sensor detects the white->black and black->white transitions, and outputs 
 % a TTL signal to indicate which patch is currently displayed.
 %
-% Two modes for frame detection are implemented.
-% Mode 0: The current light level is compared with separate light level thresholds
-%         to detect light->dark and dark->light.
-% Mode 1: (default) The device computes a signed 1ms sliding window average of sample-wise 
-%         change in light intensity. The average change in light intensity is compared to a detection 
-%         threshold. Using change in luminance instead of a simple luminance threshold improves 
-%         performance on skipped frames, and on LCD displays with slow light-to-dark transition times.
-%
 % Hardware Installation:
-% 1. Connect the Frame2TTL device to the computer with a USB micro cable.
+% 1. Connect the Frame2TTL device to the PC with a USB micro cable.
 % 2. Connect the Frame2TTL device BNC connectors to an oscilloscope for
 %    testing, or to your acquisition system input for data collection.
+% 3. Fix the Frame2TTL sensor to the bottom-right corner of the screen. 
+%    *IMPORTANT* keep the entire cable at least 5cm away from any AC 
+%    electric lines in the rig, including speaker wires.
+%    Frame2TTL uses a twisted sensor cable for some EMF resistance, but 
+%    ultimately the sensor signal is analog until it is digitized on the 
+%    circuit board, and is susceptible to EMF along the cable path.
 %
 % Usage:
 % - F = Frame2TTL('COMx'); % where COMx is your serial port string
@@ -45,14 +43,22 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 % - F.DarkThreshold = -100; % Set the light--> dark detection threshold
 % - F.setDarkThreshold_Auto; % Automatically sets the dark threshold.
 %                            % To be run while the pixels under the sensor
-%                            are WHITE (standard sensor) or half pixel intensity (IBL sensor)
+%                            are WHITE (standard sensor) or 65% pixel intensity (IBL sensor)
 % - F.setLightThreshold_Auto; % Automatically sets the light threshold.
 %                            % To be run while the pixels under the sensor
 %                            are BLACK
 % - Measurements = F.readSensor(nSamples) % Returns raw sensor
-%   measurements. Units = bits in range 0 (no light) - 2^16 (sensor saturation)
+%   measurements. Units = bits in range 0 (no light) - 2^16
 %
 % - F.streamUI; % Launches a GUI to view the optical sensor's streaming output (for testing purposes)
+%
+% Two modes for frame detection are implemented, set by F.DetectMode
+% Mode 0: The current light level is compared with separate light level thresholds
+%         to detect light->dark and dark->light.
+% Mode 1: (default) The device computes a signed 1ms sliding window average of sample-wise 
+%         change in light intensity. The average change in light intensity is compared to a detection 
+%         threshold. Using change in luminance instead of a simple luminance threshold improves 
+%         performance on skipped frames, and on LCD displays with slow light-to-dark transition times.
 %
 % - To use the device, alternate the patch of pixels underneath the sensor
 %   between white and black with each frame in your video stimulus. For
